@@ -168,6 +168,14 @@ Based on number of intermediate stops:
    }
    ```
    The status line script reads this and shows a countdown chip when within `countdown_mins` of departure. Auto-clears after the train departs.
+5. **Return journey offer**: If the added train is home→work (morning commute), offer to add a return:
+   - Fetch evening departures from work→home
+   - Show the next 3-4 fast/semi options as a quick pick list
+   - If user picks one, add it to Calendar and save to `~/.claude/trains/return.json` (same format as `next.json`)
+   - The status line script checks `return.json` after `next.json` has cleared (outbound departed), so the countdown seamlessly switches to the return train
+   - If user declines, skip silently
+
+   `return.json` format is identical to `next.json`. The status line script reads `next.json` first; if empty/departed, falls back to `return.json`.
 
 ### `/trains timetable`
 

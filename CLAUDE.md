@@ -34,12 +34,25 @@ The repo and `~/.claude/skills/trains/` must be kept in sync manually (copy file
 
 ## Known Issues / TODO
 
-- **Terminal.app opens on wrong desktop**: `osascript` opens Terminal wherever it last was, not the current Space. Fix: add `activate` before `do script` to bring it forward. Not yet implemented.
-- **`render_clean()` not updated**: The clean theme still uses the old wide layout with destination column. Needs updating to match the new minimal design.
-- **SKILL.md inline board format outdated**: The box-drawing example in SKILL.md still shows the old layout with destination column. Should be updated to match the new DEP/ARR/MINS/TYPE format.
-- **`screenshot.png` is stale**: Old screenshot from before redesign. Can be deleted (README now references `demo.gif`).
-- **No tests**: The skill has no test suite. `departures.py` could use unit tests for `parse_services`, `calc_journey_mins`, `route_type`, `format_status`.
-- **fetch.py not in repo**: The SKILL.md references `~/.claude/skills/trains/scripts/fetch.py` but this file isn't in the GitHub repo.
+### Quick wins
+- **Terminal.app opens on wrong desktop**: Add `activate` before `do script` in the osascript. Two-line fix.
+- **Delete `screenshot.png`**: Stale, README uses `demo.gif` now.
+- **Add `fetch.py` to repo**: SKILL.md references it but it's not in GitHub.
+
+### Simplify
+- **Drop or update `render_clean()`**: Still uses the old wide layout. Either match the board design (without ANSI) or remove entirely.
+- **Update SKILL.md inline board example**: Box-drawing example still shows old destination-column layout.
+- **Make repo = skill via symlink**: Stop manually copying files. README already suggests symlink install.
+
+### Make it smarter
+- **"Usually plat X" hints**: Surface platform log data when platform isn't yet assigned. Historical mode from `platforms.json`.
+- **Morning briefing integration**: If weekday morning and no train saved, auto-suggest the next fast train in the ticker.
+- **Smarter direction detection**: Instead of hard noon cutoff, check if a morning train was already added today.
+- **Disruption push on session start**: Background curl in a hook, warn if delays before user asks.
+
+### More advanced
+- **Weekly commute patterns**: Learn routine from platform log + timetable. "You usually catch the 07:45 on Tuesdays." Pre-populate `next.json`.
+- **Tests**: Unit tests for `parse_services`, `calc_journey_mins`, `route_type`, `format_status`.
 
 ## API
 
