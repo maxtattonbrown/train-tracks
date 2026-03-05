@@ -3,9 +3,9 @@ name: trains
 description: Check UK train commute times, disruptions, and add trains to Apple Calendar. Uses the Huxley2 API (National Rail Darwin proxy). Supports live departures, delay checking, baseline timetable caching, and .ics calendar export. Trigger on '/trains', or when user mentions train times, commute, or checking departures. Examples - '/trains' shows next departures, '/trains disruptions' checks for delays, '/trains add 08:15' adds a train to calendar, '/trains setup' configures stations.
 ---
 
-# Train Commute Tracker
+# trAIns — Commute Tracker
 
-Check live UK train departures, disruptions, and add trains to Apple Calendar.
+Check live UK train departures, disruptions, and add trAIns to Apple Calendar.
 
 ## Config
 
@@ -95,8 +95,19 @@ Based on number of intermediate stops:
 1. Read config
 2. Direction: before 12:00 → home-to-work, after → work-to-home
    - Override: `/trains to work`, `/trains to home`
-3. Fetch data via Bash, render board as markdown text
-4. Fallback to baseline timetable if API unreachable
+3. If theme is `board`: open an animated departures board in a Terminal.app window using:
+   ```bash
+   osascript -e 'tell application "Terminal" to do script "curl -s \"https://national-rail-api.davwheat.dev/departures/{from}/to/{to}?expand=true\" | python3 ~/.claude/skills/trains/scripts/departures.py {DEST_CRS} --theme board --animate; echo; echo \"Press any key to close\"; read -n1; exit"'
+   ```
+   This pops up a real terminal with the split-flap animation. The window stays open so the user can read it while continuing to work in Claude Code.
+4. Also render a compact inline summary in the conversation (markdown text, not the full board) so the user has the data in context too. Example:
+   ```
+   Trains: Euston → Leighton Buzzard (opened in Terminal)
+   Next: 14:56 (⚡ fast, plat 12) · 15:09 (all stations) · 15:23 (via Watford Jn)
+   ● Good service
+   ```
+5. If theme is `clean`: render the box-drawing board as inline markdown text (no Terminal popup)
+6. Fallback to baseline timetable if API unreachable
 
 ### `/trains setup`
 
