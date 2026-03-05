@@ -19,10 +19,23 @@ SHOW_CUR = "\033[?25h"
 
 FLIP_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:.- "
 
+_ANSI_RE = re.compile(r'\033\[[0-9;]*m')
+
+
+def strip_ansi(s):
+    """Remove ANSI escape codes from a string."""
+    return _ANSI_RE.sub('', s)
+
 
 def vlen(s):
     """Visible length of string, stripping ANSI codes."""
-    return len(re.sub(r'\033\[[0-9;]*m', '', s))
+    return len(strip_ansi(s))
+
+
+def hhmm_to_mins(s):
+    """Parse 'HH:MM' to total minutes since midnight."""
+    h, m = map(int, s.split(":"))
+    return h * 60 + m
 
 
 def format_status(std, etd, is_cancelled):
@@ -34,10 +47,7 @@ def format_status(std, etd, is_cancelled):
         return ("Delayed", "bad")
     if ":" in str(etd):
         try:
-            sh, sm = map(int, std.split(":"))
-            eh, em = map(int, etd.split(":"))
-            diff = (eh * 60 + em) - (sh * 60 + sm)
-            if diff > 0:
+            if hhmm_to_mins(etd) > hhmm_to_mins(std):
                 return (f"Exp {etd}", "bad")
             return ("On time", "ok")
         except ValueError:
@@ -45,30 +55,21 @@ def format_status(std, etd, is_cancelled):
     return (etd, "neutral")
 
 
-def get_arrival(service, dest_crs):
-    for cp_list in service.get("subsequentCallingPoints", []):
-        for cp in cp_list.get("callingPoint", []):
-            if cp.get("crs") == dest_crs:
-                return cp.get("st", "")
-    return ""
-
-
-def get_calling_points(service, dest_crs):
+def get_service_stops(service, dest_crs):
+    """Get arrival time and intermediate calling points in a single pass."""
     stops = []
     for cp_list in service.get("subsequentCallingPoints", []):
         for cp in cp_list.get("callingPoint", []):
             if cp.get("crs") == dest_crs:
-                break
+                return cp.get("st", ""), stops
             stops.append(cp.get("locationName", ""))
-    return stops
+    return "", stops
 
 
 def calc_journey_mins(dep, arr):
     """Calculate journey time in minutes from HH:MM strings."""
     try:
-        dh, dm = map(int, dep.split(":"))
-        ah, am = map(int, arr.split(":"))
-        return (ah * 60 + am) - (dh * 60 + dm)
+        return hhmm_to_mins(arr) - hhmm_to_mins(dep)
     except (ValueError, AttributeError):
         return None
 
@@ -93,9 +94,8 @@ def parse_services(data, dest_crs):
         op = s.get("operator", "?")
         op_code = s.get("operatorCode", "?")
         is_cancelled = s.get("isCancelled", False)
-        arr = get_arrival(s, dest_crs)
+        arr, calling = get_service_stops(s, dest_crs)
         status_text, status_type = format_status(std, etd, is_cancelled)
-        calling = get_calling_points(s, dest_crs)
         mins = calc_journey_mins(std, arr)
         rtype = route_type(calling)
         rows.append({
@@ -143,7 +143,7 @@ def render_clean(from_name, to_name, rows, now):
 
 # ── BOARD THEME ─────────────────────────────────────────────────
 
-def board_line(content, w=64):
+def board_line(content, w=52):
     vis = vlen(content)
     pad = max(0, w - vis)
     return f"{BG}{content}{' ' * pad}{RS}"
@@ -153,25 +153,25 @@ def render_board(from_name, to_name, rows, now, animate=False):
     W = 52
 
     def sep():
-        print(board_line(f"{DM}{'─' * W}{RS}{BG}", W))
+        print(board_line(f"{DM}{'─' * W}{RS}{BG}"))
 
     if animate:
         sys.stdout.write(HIDE_CUR)
         sys.stdout.flush()
 
     sep()
-    print(board_line("", W))
-    print(board_line(f"  {BD}{WH}{from_name.upper()} → {to_name.upper()}{RS}{BG}", W))
-    print(board_line(f"  {DM}{now}{RS}{BG}", W))
-    print(board_line("", W))
+    print(board_line(""))
+    print(board_line(f"  {BD}{WH}{from_name.upper()} → {to_name.upper()}{RS}{BG}"))
+    print(board_line(f"  {DM}{now}{RS}{BG}"))
+    print(board_line(""))
     sep()
-    print(board_line(f"  {DM}DEP    ARR    MINS  TYPE{RS}{BG}", W))
+    print(board_line(f"  {DM}DEP    ARR    MINS  TYPE{RS}{BG}"))
     sep()
 
     if not rows:
-        print(board_line("", W))
-        print(board_line(f"  {DM}No services currently shown{RS}{BG}", W))
-        print(board_line("", W))
+        print(board_line(""))
+        print(board_line(f"  {DM}No services currently shown{RS}{BG}"))
+        print(board_line(""))
     else:
         for i, r in enumerate(rows):
             mins_s = f"{r['mins']:>2}" if r["mins"] else " ?"
@@ -179,53 +179,41 @@ def render_board(from_name, to_name, rows, now, animate=False):
             # Route type: fast gets amber ⚡, semi gets dim "via X", stopping is unmarked
             if r["route_type"] == "fast":
                 type_s = f"{AM}{BD}⚡ fast{RS}{BG}"
-                type_plain = "⚡ fast"
             elif r["route_type"] == "semi":
                 via = r["calling"][0] if r["calling"] else ""
                 # Shorten common station names
                 via = via.replace(" Junction", " Jn")
                 type_s = f"{DM}via {via}{RS}{BG}"
-                type_plain = f"via {via}"
             else:
                 type_s = f"{DM}stopping{RS}{BG}"
-                type_plain = "stopping"
 
             # Platform: only show if assigned
-            plat_s = ""
-            plat_plain = ""
-            if r["plat"]:
-                plat_s = f"  {DM}plat {WH}{r['plat']}{RS}{BG}"
-                plat_plain = f"  plat {r['plat']}"
+            plat_s = f"  {DM}plat {WH}{r['plat']}{RS}{BG}" if r["plat"] else ""
 
             # Status: only show if NOT on time
-            stat_s = ""
-            stat_plain = ""
-            if r["status_type"] == "bad":
-                stat_s = f"  {RD}{r['status']}{RS}{BG}"
-                stat_plain = f"  {r['status']}"
+            stat_s = f"  {RD}{r['status']}{RS}{BG}" if r["status_type"] == "bad" else ""
 
             # Build the row
             main = f"  {AM}{BD}{r['std']}{RS}{BG}   {WH}{r['arr']}{RS}{BG}    {DM}{mins_s}{RS}{BG}   {type_s}{plat_s}{stat_s}"
-            main_plain = f"  {r['std']}   {r['arr']}    {mins_s}   {type_plain}{plat_plain}{stat_plain}"
 
             if animate:
-                flip_row(main_plain, main, W)
+                flip_row(strip_ansi(main), main, W)
                 time.sleep(0.08)
             else:
-                print(board_line(main, W))
+                print(board_line(main))
 
     sep()
-    print(board_line("", W))
+    print(board_line(""))
 
     cancelled_n = sum(1 for r in rows if r["status_type"] == "bad")
     if cancelled_n:
-        print(board_line(f"  {RD}▲ {cancelled_n} service(s) disrupted{RS}{BG}", W))
+        print(board_line(f"  {RD}▲ {cancelled_n} service(s) disrupted{RS}{BG}"))
     elif not rows:
-        print(board_line(f"  {DM}No information available{RS}{BG}", W))
+        print(board_line(f"  {DM}No information available{RS}{BG}"))
     else:
-        print(board_line(f"  {GR}● Good service{RS}{BG}", W))
+        print(board_line(f"  {GR}● Good service{RS}{BG}"))
 
-    print(board_line("", W))
+    print(board_line(""))
     sep()
 
     if animate:
@@ -241,17 +229,18 @@ def flip_row(target_plain, final_ansi, w):
     max_flips = max(flips_remaining)
 
     for frame in range(max_flips + 1):
-        line = ""
+        chars = []
         for j in range(length):
             if flips_remaining[j] <= frame:
-                line += target_plain[j]
+                chars.append(target_plain[j])
             else:
-                line += random.choice(FLIP_CHARS)
+                chars.append(random.choice(FLIP_CHARS))
+        line = "".join(chars)
 
-        padded = f"{BG}{AM}  {line}{RS}{BG}"
-        vis = vlen(padded)
+        # Visible length is deterministic: "  " prefix + line content
+        vis = len(line) + 2
         pad = max(0, w - vis)
-        sys.stdout.write(f"\r{padded}{' ' * pad}{RS}")
+        sys.stdout.write(f"\r{BG}{AM}  {line}{RS}{BG}{' ' * pad}{RS}")
         sys.stdout.flush()
         time.sleep(0.04)
 
@@ -269,10 +258,10 @@ PLATFORM_LOG = os.path.expanduser("~/.claude/trains/platforms.json")
 def log_platforms(from_station, dest_crs, rows):
     """Silently log platform assignments for future 'usually plat X' hints."""
     try:
-        if os.path.exists(PLATFORM_LOG):
+        try:
             with open(PLATFORM_LOG) as f:
                 log = json.load(f)
-        else:
+        except (FileNotFoundError, json.JSONDecodeError):
             log = {}
 
         today = datetime.now().strftime("%Y-%m-%d")
@@ -349,7 +338,7 @@ def main():
 
     try:
         data = json.load(sys.stdin)
-    except (json.JSONDecodeError, Exception):
+    except Exception:
         print(f"{RD}  Could not reach National Rail API{RS}")
         sys.exit(1)
 
