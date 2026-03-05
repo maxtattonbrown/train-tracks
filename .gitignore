@@ -1,0 +1,10 @@
+# Config (contains user-specific station data)
+config.json
+timetable.json
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
