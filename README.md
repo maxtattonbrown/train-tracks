@@ -1,6 +1,6 @@
 # Train Tracks — A Claude Code Skill for UK Train Times
 
-A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that checks live UK train departures, warns about disruptions, and adds trains to your Apple Calendar. Built on the free [Huxley2](https://github.com/jpsingleton/Huxley2) API (a JSON proxy for National Rail's Darwin system).
+A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that checks live UK train departures, warns about disruptions, and adds trains to your calendar. Integrates with [Fantastical](https://flexibits.com/fantastical) via MCP when available, with an `.ics` fallback for Apple Calendar. Built on the free [Huxley2](https://github.com/jpsingleton/Huxley2) API (a JSON proxy for National Rail's Darwin system).
 
 ![Departures board animation](demo.gif)
 
@@ -9,7 +9,7 @@ A [Claude Code](https://docs.anthropic.com/en/docs/claude-code) skill that check
 - **Live departures** — minimal board showing departure, arrival, journey time, and route type (fast/semi/stopping)
 - **Split-flap animation** — pops up a Terminal.app window with an animated departures board
 - **Disruption alerts** — checks for delays and cancellations on your route
-- **Calendar integration** — adds a specific train to Apple Calendar via `.ics` export
+- **Calendar integration** — adds trains via Fantastical MCP (if configured) or `.ics` export to Apple Calendar
 - **Status line countdown** — shows a countdown chip in your Claude Code status line when your train is approaching
 - **Filters and sorting** — show only fast/semi/stopping trains, sort by departure or arrival time
 - **Platform logging** — silently tracks platform assignments over time for future "usually plat X" hints
@@ -43,8 +43,8 @@ Run `/trains setup` in Claude Code. It will ask for your two station names, vali
 | `/trains to work` | Force home→work direction |
 | `/trains to home` | Force work→home direction |
 | `/trains disruptions` | Check for delays/cancellations both directions |
-| `/trains add 08:15` | Add the 08:15 departure to Apple Calendar + start countdown |
-| `/trains add next` | Add the next departure to Apple Calendar + start countdown |
+| `/trains add 08:15` | Add the 08:15 departure to calendar + start countdown |
+| `/trains add next` | Add the next departure to calendar + start countdown |
 | `/trains timetable` | Show cached baseline schedule |
 | `/trains refresh` | Re-capture baseline timetable |
 | `/trains setup` | Reconfigure stations |
@@ -129,13 +129,25 @@ if [[ -f "$next_train" ]]; then
 fi
 ```
 
+## Calendar integration
+
+Train events are added using whichever method is available:
+
+1. **Fantastical MCP** (preferred) — if you have [Fantastical](https://flexibits.com/fantastical) installed and the MCP configured in Claude Code, events are created directly via `mcp__Fantastical__createCalendarItem`. No file export needed. See the [Fantastical MCP setup guide](https://flexibits.com/fantastical/help/fantastical-connector-mcp-for-claude) — install via Claude Desktop, then register the binary with Claude Code:
+   ```bash
+   claude mcp add --scope user Fantastical \
+     "~/Library/Application Support/Claude/Claude Extensions/ant.dir.gh.flexibits.fantastical-mcp/server/FantasticalMCP.app/Contents/MacOS/FantasticalMCP"
+   ```
+2. **Fantastical via `.ics`** — if Fantastical is installed but the MCP isn't configured, events open in Fantastical via file import.
+3. **Apple Calendar** — plain `.ics` fallback for everyone else.
+
 ## Requirements
 
 - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (for the skill)
 - Python 3 (for the display script)
 - `curl` (for API calls)
 - `jq` (for status line countdown)
-- macOS (for Terminal.app animation and Apple Calendar `.ics` integration)
+- macOS (for Terminal.app animation and calendar integration)
 
 ## API
 
